@@ -9,7 +9,7 @@ output:
     code_folding: show
 ---
 
-```{r setup, include=FALSE}
+```{r, include=FALSE}
 knitr::opts_chunk$set(
   echo    = TRUE,
   warning = FALSE,
@@ -25,12 +25,12 @@ library(corrplot)
 
 # 1 Data Loading
 
-```{r load-data}
+```{r}
 load("data/datA.RData")
 load("data/datB.RData")
 
-cat("datA:", nrow(datA), "obs x", ncol(datA), "vars\n")
-cat("datB:", nrow(datB), "obs x", ncol(datB), "vars\n")
+dim(datA)
+dim(datB)
 ```
 
 # 2 Data Cleaning
@@ -39,7 +39,7 @@ cat("datB:", nrow(datB), "obs x", ncol(datB), "vars\n")
 
 Encode all categorical variables as factors with interpretable labels.
 
-```{r factor-encoding}
+```{r}
 convert_factors <- function(df) {
   df$menopause       <- factor(df$menopause, levels = 0:1,
                                labels = c("Pre", "Post"))
@@ -72,11 +72,8 @@ str(datA)
 
 ## 2.2 Missing Data Check
 
-```{r missing-data}
-cat("--- datA ---\n")
+```{r}
 colSums(is.na(datA))
-
-cat("\n--- datB ---\n")
 colSums(is.na(datB))
 ```
 
@@ -86,13 +83,13 @@ No missing values in either dataset — no imputation needed.
 
 ## 3.1 Summary Statistics
 
-```{r summary-stats}
+```{r}
 summary(datA[, -1])
 ```
 
 ## 3.2 Response Variable Distribution
 
-```{r response-dist, fig.cap="Distribution of log(PFS) in Cohort A"}
+```{r}
 par(mfrow = c(1, 2))
 
 hist(datA$log_PFS, breaks = 30,
@@ -111,7 +108,7 @@ log(PFS) is approximately normal with mean `r round(mean(datA$log_PFS), 3)` and 
 
 ## 3.3 Continuous Predictors
 
-```{r continuous-boxplots, fig.height=4}
+```{r, fig.height=4}
 cont_vars <- c("age", "bmi", "tumor_size", "lymph_nodes", "Ki67")
 
 par(mfrow = c(1, 5), mar = c(4, 3, 2, 1))
@@ -120,7 +117,7 @@ for (v in cont_vars) {
 }
 ```
 
-```{r continuous-summary}
+```{r}
 cont_df <- datA[, cont_vars]
 data.frame(
   Variable = cont_vars,
@@ -134,7 +131,7 @@ data.frame(
 
 ## 3.4 Correlation Matrix
 
-```{r correlation-matrix, fig.height=5}
+```{r, fig.height=5}
 cont_with_y <- c(cont_vars, "log_PFS")
 cor_mat <- cor(datA[, cont_with_y])
 
@@ -159,7 +156,7 @@ Note: `tumor_size` and `lymph_nodes` are strongly correlated with each other (r 
 
 ## 3.5 Categorical Variable Distributions
 
-```{r categorical-barplots, fig.height=8}
+```{r, fig.height=8}
 cat_vars <- c("menopause", "race", "tumor_grade", "stage",
               "ER", "PR", "HER2",
               "surgery", "chemo", "hormonal_therapy")
@@ -172,18 +169,17 @@ for (v in cat_vars) {
 }
 ```
 
-```{r categorical-tables}
-for (v in cat_vars) {
-  cat(sprintf("\n--- %s ---\n", v))
+```{r}
+lapply(cat_vars, function(v) {
   tbl <- table(datA[[v]])
   pct <- round(prop.table(tbl) * 100, 1)
-  print(data.frame(Level = names(tbl), N = as.integer(tbl), Pct = paste0(pct, "%")))
-}
+  data.frame(Variable = v, Level = names(tbl), N = as.integer(tbl), Pct = paste0(pct, "%"))
+}) |> do.call(rbind, args = _)
 ```
 
 ## 3.6 Outcome by Key Predictors
 
-```{r boxplots-by-category, fig.height=8}
+```{r, fig.height=8}
 key_cats <- c("ER", "PR", "HER2", "tumor_grade", "stage", "hormonal_therapy")
 
 par(mfrow = c(2, 3), mar = c(4, 4, 2, 1))
@@ -197,7 +193,7 @@ for (v in key_cats) {
 
 ## 3.7 Scatterplots: Continuous Predictors vs log(PFS)
 
-```{r scatter-vs-pfs, fig.height=4}
+```{r, fig.height=4}
 par(mfrow = c(1, 5), mar = c(4, 4, 2, 1))
 for (v in cont_vars) {
   plot(datA[[v]], datA$log_PFS,
@@ -205,52 +201,6 @@ for (v in cont_vars) {
        xlab = v, ylab = "log(PFS)",
        main = paste(v, "vs log(PFS)"))
   abline(lm(datA$log_PFS ~ datA[[v]]), col = "red", lwd = 2)
-}
-```
-
-# 4 Cohort Comparison (A vs B)
-
-Quick comparison to flag distributional shifts between the 1990–1995 and 2000–2005 cohorts.
-
-## 4.1 Outcome
-
-```{r cohort-outcome, fig.height=4}
-par(mfrow = c(1, 2))
-hist(datA$log_PFS, breaks = 30, xlim = c(-1, 6),
-     main = "Cohort A (1990-1995)",
-     xlab = "log(PFS)", col = "steelblue", border = "white")
-abline(v = mean(datA$log_PFS), col = "red", lwd = 2, lty = 2)
-
-hist(datB$log_PFS, breaks = 30, xlim = c(-1, 6),
-     main = "Cohort B (2000-2005)",
-     xlab = "log(PFS)", col = "coral", border = "white")
-abline(v = mean(datB$log_PFS), col = "red", lwd = 2, lty = 2)
-```
-
-```{r cohort-outcome-test}
-t.test(datA$log_PFS, datB$log_PFS)
-```
-
-## 4.2 Continuous Predictors
-
-```{r cohort-continuous}
-for (v in cont_vars) {
-  tt <- t.test(datA[[v]], datB[[v]])
-  cat(sprintf("%-12s  A: %.2f (%.2f)  B: %.2f (%.2f)  p = %.4f\n",
-              v,
-              mean(datA[[v]]), sd(datA[[v]]),
-              mean(datB[[v]]), sd(datB[[v]]),
-              tt$p.value))
-}
-```
-
-## 4.3 Categorical Predictors
-
-```{r cohort-categorical}
-for (v in cat_vars) {
-  tab <- rbind(A = table(datA[[v]]), B = table(datB[[v]]))
-  chi <- chisq.test(tab)
-  cat(sprintf("%-18s  chi-sq = %6.2f  p = %.4f\n", v, chi$statistic, chi$p.value))
 }
 ```
 
