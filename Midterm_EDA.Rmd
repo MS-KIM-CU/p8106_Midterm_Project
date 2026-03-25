@@ -23,7 +23,7 @@ library(MASS)
 library(corrplot)
 ```
 
-# 1 Data Loading
+# 1) Data Loading
 
 ```{r}
 load("data/datA.RData")
@@ -33,7 +33,7 @@ dim(datA)
 dim(datB)
 ```
 
-# 2 Data Cleaning
+# 2) Data Cleaning
 
 ## 2.1 Factor Encoding
 
@@ -79,7 +79,7 @@ colSums(is.na(datB))
 
 No missing values in either dataset — no imputation needed.
 
-# 3 Exploratory Data Analysis (Cohort A)
+# 3) Exploratory Data Analysis (Cohort A)
 
 ## 3.1 Summary Statistics
 
@@ -206,4 +206,4 @@ for (v in cont_vars) {
 
 ---
 
-*Next steps: model training, diagnostics, and external validation will be added in a separate analysis file.*
+*Next steps: model training, diagnostics, and external validation.*
