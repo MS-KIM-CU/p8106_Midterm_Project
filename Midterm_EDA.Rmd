@@ -24,9 +24,10 @@ library(corrplot)
 library(caret)
 library(glmnet)
 library(tidymodels)
+library(mgcv)
 ```
 
-# 1) Data Loading
+# 1 Data Loading
 
 ```{r}
 load("data/datA.RData")
@@ -36,7 +37,7 @@ dim(datA)
 dim(datB)
 ```
 
-# 2) Data Cleaning
+# 2 Data Cleaning
 
 ## 2.1 Factor Encoding
 
@@ -82,7 +83,7 @@ colSums(is.na(datB))
 
 No missing values in either dataset — no imputation needed.
 
-# 3) Exploratory Data Analysis (Cohort A)
+# 3 Exploratory Data Analysis (Cohort A)
 
 ## 3.1 Summary Statistics
 
@@ -211,20 +212,34 @@ for (v in cont_vars) {
 
 *Next steps: model training, diagnostics, and external validation.*
 
-## Model Training 
+# 4 Model Training
+
+## 4.1 Prepare data for modeling
 ```{r}
+# factor non-continuous variables *yw*
+datA$race <- as.factor(datA$race)
+datA$menopause <- as.factor(datA$menopause)
+datA$tumor_grade <- as.factor(datA$tumor_grade)
+datA$stage <- as.factor(datA$stage)
+
+binary_vars <- c("ER", "PR", "HER2", "surgery", "chemo", "hormonal_therapy")
+datA[binary_vars] <- lapply(datA[binary_vars], as.factor)
+
 # creating train/test split
 set.seed(1)
 n = nrow(datA)
-data_split = initial_split(datA, prop = 0.8)
-trainA = training(data_split)
+splitA = initial_split(datA, prop = 0.8)
+
+trainA = training(splitA)
 trainA = subset(trainA, select = -id)
-testA = testing(data_split)
+
+testA = testing(splitA)
 testA = subset(testA, select = -id)
+
 ctrl = trainControl(method = "cv", number = 10)
 ```
 
-### Fitting the Linear Regression
+## 4.2 Fitting the Linear Regression
 ```{r}
 set.seed(1)
 fit_lm = train(log_PFS ~ ., data = trainA, method = "lm", trControl = ctrl)
@@ -234,33 +249,131 @@ pred_lm = predict(fit_lm, newdata = testA)
 lm_result = postResample(pred = pred_lm, obs = testA$log_PFS)
 ```
 
-### Fitting the glmnet model
+## 4.3 Elastic Net
 ```{r}
 set.seed(1)
 fit_glmnet = train(log_PFS ~ ., data = trainA, method = "glmnet", trControl = ctrl, tuneLength = 10)
-fit_glmnet
+summary(fit_glmnet)
 plot(fit_glmnet)
-fit_glmnet$bestTune
+
 pred_glmnet = predict(fit_glmnet, newdata = testA)
 glmnet_result = postResample(pred = pred_glmnet, obs = testA$log_PFS)
 ```
-### Comparing the two models 
-```{r}
 
-results <- data.frame(lm_result, glmnet_result)
-results
-coef(fit_glmnet$finalModel, fit_glmnet$bestTune$lambda)
+## 4.4 Interactive Elastic Net
+```{r}
+# *yw*
+
+set.seed(1)
+fit_glmnet_int <- train(log_PFS ~ .^2, data = trainA, method = "glmnet", trControl = ctrl, tuneLength = 10)
+summary(fit_glmnet_int)
+plot(fit_glmnet_int)
+
+pred_glmnet_int <- predict(fit_glmnet_int, newdata = testA)
+glmnet_int_result <- postResample(pred = pred_glmnet_int, obs = testA$log_PFS)
 ```
 
-### Result
-fitting model with `glmnet` framework shows a better performance because it has lower RMSE & MAE, and a higher R-squared. We selected the elastic-net model as the final model for Cohort A. t also produced a more parsimonious model by shrinking some coefficients to zero, including BMI, PR, stage II, and chemotherapy. The predictors that remained important in the final model were age, menopausal status, race, tumor size, tumor grade, lymph nodes, ER, HER2, Ki67, surgery type, and hormonal therapy.
+## 4.5 GAM Model
+```{r}
+# *yw*
 
-### Interpretation and Assessment
+set.seed(1)
+fit_gam <- gam(
+  log_PFS ~ s(age) + s(bmi) + s(tumor_size) + s(lymph_nodes) + s(Ki67) + 
+            race + menopause + tumor_grade + stage + ER + PR + HER2 + 
+            surgery + chemo + hormonal_therapy,
+  data = trainA,
+  method = "REML"
+)
+summary(fit_gam)
+
+pred_gam <- predict(fit_gam, newdata = testA)
+gam_result <- postResample(pred = pred_gam, obs = testA$log_PFS)
+```
+
+
+## 4.4 Model Comparison
+```{r}
+results <- data.frame(lm_result, glmnet_result, glmnet_int_result, gam_result)
+results
+
+# coef(fit_glmnet$finalModel, fit_glmnet$bestTune$lambda)
+
+coefs <- coef(fit_glmnet_int$finalModel, fit_glmnet_int$bestTune$lambda)
+coef_mat <- as.matrix(coefs)
+active_coefs <- coef_mat[coef_mat[, 1] != 0, , drop = FALSE]
+sorted_coefs <- active_coefs[order(-abs(active_coefs[, 1])), , drop = FALSE]
+
+print(sorted_coefs)
+```
+
+## 4.5 Result
+
+Fitting model with `glmnet` framework shows a better performance because it has lower RMSE & MAE, and a higher R-squared. We selected the elastic-net model as the final model for Cohort A. t also produced a more parsimonious model by shrinking some coefficients to zero, including BMI, PR, stage II, and chemotherapy. The predictors that remained important in the final model were age, menopausal status, race, tumor size, tumor grade, lymph nodes, ER, HER2, Ki67, surgery type, and hormonal therapy.
+
+
+*yw* Fitting the model with the interactive glmnet demonstrated superior predictive performance because it has the lowest RMSE and MAE among all tested models. We selected the interactive elastic-net as the final prediction model for Cohort A. The regularization penalty effectively managed the high-dimensional feature space, producing a parsimonious model by shrinking the vast majority of the non-informative main effects and potential interactions to exactly zero. The strongest standalone predictors that remained important included ER status, hormonal therapy, lymph node involvement, tumor grade, and Ki-67 index. Crucially, the model successfully isolated highly predictive interaction terms, capturing complex clinical synergies like ERPositive:hormonal_therapyYes and compounding risk factors such as HER2Positive:stageII and tumor_size:tumor_gradePoor.
+
+## 4.6 Interpretation
+
 Overall, the final model suggests that greater tumor burden and more aggressive tumor biology are associated with shorter progression-free survival, while ER positivity and hormonal therapy are associated with longer progression-free survival. However, predictive performance was only modest (test-set R² about 0.17), which means the available baseline variables explain some, but not all, of the variation in log_PFS.
 
 So for the next part, the elastic-net model from Cohort A should be carried forward for external validation on Cohort B.
 
+*yw* Overall, the final model suggests that while aggressive tumor biology is associated with shorter progression-free survival, ER positivity and hormonal therapy act as strong baseline protective factors. Furthermore, the interaction terms reveal critical clinical finding: hormonal therapy provides a compounding, synergistic survival benefit specifically for ER-positive and Stage II patients, whereas the combination of large, poorly differentiated tumors drastically accelerates disease progression. However, overall predictive performance remains modest (test-set R-squared of 0.18). This indicates that while the inclusion of interaction terms successfully captures deeper biological dynamics and improves upon the base model, the available baseline variables still only explain a portion of the total variation in log_PFS.
 
+# 5 Generalization
 
+## 5.1 External Validation with Cohort B
+```{r}
+datB$race <- as.factor(datB$race)
+datB$menopause <- as.factor(datB$menopause)
+datB$tumor_grade <- as.factor(datB$tumor_grade)
+datB$stage <- as.factor(datB$stage)
 
+binary_vars <- c("ER", "PR", "HER2", "surgery", "chemo", "hormonal_therapy")
+datB[binary_vars] <- lapply(datB[binary_vars], as.factor)
+
+set.seed(1)
+splitB <- initial_split(datB, prop = 0.8)
+trainB <- subset(training(splitB), select = -id)
+testB <- subset(testing(splitB), select = -id)
+
+# predict the new 2000-2005 cohort using previous model
+pred_b <- predict(fit_glmnet_int, newdata = testB)
+external_validation_results <- postResample(pred = pred_b, obs = testB$log_PFS)
+
+print(external_validation_results)
+```
+
+The interactive Elastic Net model does not seem to be robust on cohort B as the RMSE increased from 0.74 to 0.87 and the MAE increased from 0.58 to 0.70. Since our is log-transformed PFS, a 0.12 increase in average error on the log scale is significant. The model trained on cohort A are missing the true survival times in cohort B by a wider margin. Considering factors like health care standards between the 1990s and the early 2000s, we should build a model to adapt the potential changes of predictors.
+
+## 5.2 Fitting a new Interactive Elastic Net
+```{r}
+set.seed(1)
+fit_glmnet_int_b <- train(log_PFS ~ .^2, data = trainB, method = "glmnet", trControl = ctrl, tuneLength = 10)
+
+pred_b_new <- predict(fit_glmnet_int_b, newdata = testB)
+new_model_results <- postResample(pred = pred_b_new, obs = testB$log_PFS)
+print(new_model_results)
+
+coefs_b <- coef(fit_glmnet_int_b$finalModel, fit_glmnet_int_b$bestTune$lambda)
+coef_mat_b <- as.matrix(coefs_b)
+active_coefs_b <- coef_mat_b[coef_mat_b[, 1] != 0, , drop = FALSE]
+sorted_coefs_b <- active_coefs_b[order(-abs(active_coefs_b[, 1])), , drop = FALSE]
+
+print(sorted_coefs_b)
+```
+
+There are several key changes in predictive terms:
+
+- The intercept changed from 2.37 to 2.87, meaning the baseline PFS for reference patient improved from roughly 10.7 months to 17.6 months.
+
+- ERPositive dropped from +0.196 to +0.107, while hormonal_therapyYes increased from 0.062 to 0.198. This flip proved that in 2000s, having a hormonal therapy is a more powerful driver of survival than simply having a less aggressive (ER+) tumor.
+
+- The new model relies heavily on race-based interaction terms to make accurate predictions. i.e. raceAsian:stageII (-0.116) emerged as a risk factor, while raceHispanic:HER2Positive (+0.081) and raceHispanic:PRPositive (+0.026) emerged as protective. When care standard improves, unequal access to treatments between demographic groups become much stronger predictors of survival.
+
+- The main effect for lymph_nodes (which was strongly negative in the 90s) shrinks to zero, meaning that finding a positive lymph node in early-stage might not be a death sentence anymore due to better medical treatment.
+
+- In the old model, HER2Positive:stageII was a risk factor (-0.085), but it shrinks to zero in the new model. Now we see positive interactions like tumor_gradeModerate:HER2Positive (+0.024) and raceHispanic:HER2Positive (+0.081). This could be a result of the common use of Trastuzumab, a targeted therapy for HER2+ breast cancer.
 
