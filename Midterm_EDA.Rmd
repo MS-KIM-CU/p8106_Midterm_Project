@@ -21,6 +21,9 @@ knitr::opts_chunk$set(
 
 library(MASS)
 library(corrplot)
+library(caret)
+library(glmnet)
+library(tidymodels)
 ```
 
 # 1) Data Loading
@@ -207,3 +210,55 @@ for (v in cont_vars) {
 ---
 
 *Next steps: model training, diagnostics, and external validation.*
+
+## Model Training 
+```{r}
+# creating train/test split
+set.seed(1)
+n = nrow(datA)
+data_split = initial_split(datA, prop = 0.8)
+trainA = training(data_split)
+trainA = subset(trainA, select = -id)
+testA = testing(data_split)
+testA = subset(testA, select = -id)
+ctrl = trainControl(method = "cv", number = 10)
+```
+
+### Fitting the Linear Regression
+```{r}
+set.seed(1)
+fit_lm = train(log_PFS ~ ., data = trainA, method = "lm", trControl = ctrl)
+fit_lm
+summary(fit_lm$finalModel)
+pred_lm = predict(fit_lm, newdata = testA)
+lm_result = postResample(pred = pred_lm, obs = testA$log_PFS)
+```
+
+### Fitting the glmnet model
+```{r}
+set.seed(1)
+fit_glmnet = train(log_PFS ~ ., data = trainA, method = "glmnet", trControl = ctrl, tuneLength = 10)
+fit_glmnet
+plot(fit_glmnet)
+fit_glmnet$bestTune
+pred_glmnet = predict(fit_glmnet, newdata = testA)
+glmnet_result = postResample(pred = pred_glmnet, obs = testA$log_PFS)
+```
+### Comparing the two models 
+```{r}
+
+results <- data.frame(lm_result, glmnet_result)
+results
+coef(fit_glmnet$finalModel, fit_glmnet$bestTune$lambda)
+```
+
+### Result
+fitting model with `glmnet` framework shows a better performance because it has lower RMSE & MAE, and a higher R-squared. We selected the elastic-net model as the final model for Cohort A. t also produced a more parsimonious model by shrinking some coefficients to zero, including BMI, PR, stage II, and chemotherapy. The predictors that remained important in the final model were age, menopausal status, race, tumor size, tumor grade, lymph nodes, ER, HER2, Ki67, surgery type, and hormonal therapy.
+
+### Interpretation and Assessment
+Overall, the final model suggests that greater tumor burden and more aggressive tumor biology are associated with shorter progression-free survival, while ER positivity and hormonal therapy are associated with longer progression-free survival. However, predictive performance was only modest (test-set R² about 0.17), which means the available baseline variables explain some, but not all, of the variation in log_PFS.
+
+So for the next part, the elastic-net model from Cohort A should be carried forward for external validation on Cohort B.
+
+
+
