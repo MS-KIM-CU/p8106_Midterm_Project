@@ -229,13 +229,10 @@ datA[binary_vars] <- lapply(datA[binary_vars], as.factor)
 set.seed(1)
 n = nrow(datA)
 splitA = initial_split(datA, prop = 0.8)
-
 trainA = training(splitA)
 trainA = subset(trainA, select = -id)
-
 testA = testing(splitA)
 testA = subset(testA, select = -id)
-
 ctrl = trainControl(method = "cv", number = 10)
 ```
 
@@ -263,7 +260,6 @@ glmnet_result = postResample(pred = pred_glmnet, obs = testA$log_PFS)
 ## 4.4 Interactive Elastic Net
 ```{r}
 # *yw*
-
 set.seed(1)
 fit_glmnet_int <- train(log_PFS ~ .^2, data = trainA, method = "glmnet", trControl = ctrl, tuneLength = 10)
 summary(fit_glmnet_int)
@@ -391,9 +387,6 @@ if (length(resid_train) > 5000) {
 ```
 
 ## 4.9 Result
-
-Fitting model with `glmnet` framework shows a better performance because it has lower RMSE & MAE, and a higher R-squared. We selected the elastic-net model as the final model for Cohort A. t also produced a more parsimonious model by shrinking some coefficients to zero, including BMI, PR, stage II, and chemotherapy. The predictors that remained important in the final model were age, menopausal status, race, tumor size, tumor grade, lymph nodes, ER, HER2, Ki67, surgery type, and hormonal therapy.
-
 
 *yw* Fitting the model with the interactive glmnet demonstrated superior predictive performance because it has the lowest RMSE and MAE among all tested models. We selected the interactive elastic-net as the final prediction model for Cohort A. The regularization penalty effectively managed the high-dimensional feature space, producing a parsimonious model by shrinking the vast majority of the non-informative main effects and potential interactions to exactly zero. The strongest standalone predictors that remained important included ER status, hormonal therapy, lymph node involvement, tumor grade, and Ki-67 index. Crucially, the model successfully isolated highly predictive interaction terms, capturing complex clinical synergies like ERPositive:hormonal_therapyYes and compounding risk factors such as HER2Positive:stageII and tumor_size:tumor_gradePoor.
 
