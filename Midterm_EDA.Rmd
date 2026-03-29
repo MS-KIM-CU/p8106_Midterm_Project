@@ -392,11 +392,9 @@ if (length(resid_train) > 5000) {
 
 ## 4.10 Interpretation
 
-Overall, the final model suggests that greater tumor burden and more aggressive tumor biology are associated with shorter progression-free survival, while ER positivity and hormonal therapy are associated with longer progression-free survival. However, predictive performance was only modest (test-set R² about 0.17), which means the available baseline variables explain some, but not all, of the variation in log_PFS.
-
-So for the next part, the elastic-net model from Cohort A should be carried forward for external validation on Cohort B.
-
 *yw* Overall, the final model suggests that while aggressive tumor biology is associated with shorter progression-free survival, ER positivity and hormonal therapy act as strong baseline protective factors. Furthermore, the interaction terms reveal critical clinical finding: hormonal therapy provides a compounding, synergistic survival benefit specifically for ER-positive and Stage II patients, whereas the combination of large, poorly differentiated tumors drastically accelerates disease progression. However, overall predictive performance remains modest (test-set R-squared of 0.18). This indicates that while the inclusion of interaction terms successfully captures deeper biological dynamics and improves upon the base model, the available baseline variables still only explain a portion of the total variation in log_PFS.
+
+For the next part, the elastic-net model from Cohort A would be carried forward for external validation on Cohort B.
 
 # 5 Generalization
 
