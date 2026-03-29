@@ -376,6 +376,8 @@ hist(resid_train, breaks = 30,
 abline(v = 0, col = "red", lwd = 2, lty = 2)
 ```
 
+Overall, the diagnostic review suggested that the model fit was reasonable for a predictive analysis. The residual plots were primarily used to check whether there were obvious patterns indicating systematic misspecification, such as strong nonlinearity or severe heteroscedasticity. The Q–Q plot and histogram were used to assess whether the residual distribution was approximately symmetric and centered around zero.
+
 ```{r}
 # *ms* Shapiro-Wilk normality test on residuals (sample of 5000 if needed)
 if (length(resid_train) > 5000) {
@@ -388,11 +390,11 @@ if (length(resid_train) > 5000) {
 
 ## 4.9 Result
 
-*yw* Fitting the model with the interactive glmnet demonstrated superior predictive performance because it has the lowest RMSE and MAE among all tested models. We selected the interactive elastic-net as the final prediction model for Cohort A. The regularization penalty effectively managed the high-dimensional feature space, producing a parsimonious model by shrinking the vast majority of the non-informative main effects and potential interactions to exactly zero. The strongest standalone predictors that remained important included ER status, hormonal therapy, lymph node involvement, tumor grade, and Ki-67 index. Crucially, the model successfully isolated highly predictive interaction terms, capturing complex clinical synergies like ERPositive:hormonal_therapyYes and compounding risk factors such as HER2Positive:stageII and tumor_size:tumor_gradePoor.
+Fitting the model with the interactive glmnet demonstrated superior predictive performance because it has the lowest RMSE and MAE among all tested models. We selected the interactive elastic-net as the final prediction model for Cohort A. The regularization penalty effectively managed the high-dimensional feature space, producing a parsimonious model by shrinking the vast majority of the non-informative main effects and potential interactions to exactly zero. The strongest standalone predictors that remained important included ER status, hormonal therapy, lymph node involvement, tumor grade, and Ki-67 index. Crucially, the model successfully isolated highly predictive interaction terms, capturing complex clinical synergies like ERPositive:hormonal_therapyYes and compounding risk factors such as HER2Positive:stageII and tumor_size:tumor_gradePoor.
 
 ## 4.10 Interpretation
 
-*yw* Overall, the final model suggests that while aggressive tumor biology is associated with shorter progression-free survival, ER positivity and hormonal therapy act as strong baseline protective factors. Furthermore, the interaction terms reveal critical clinical finding: hormonal therapy provides a compounding, synergistic survival benefit specifically for ER-positive and Stage II patients, whereas the combination of large, poorly differentiated tumors drastically accelerates disease progression. However, overall predictive performance remains modest (test-set R-squared of 0.18). This indicates that while the inclusion of interaction terms successfully captures deeper biological dynamics and improves upon the base model, the available baseline variables still only explain a portion of the total variation in log_PFS.
+Overall, the final model suggests that while aggressive tumor biology is associated with shorter progression-free survival, ER positivity and hormonal therapy act as strong baseline protective factors. Furthermore, the interaction terms reveal critical clinical finding: hormonal therapy provides a compounding, synergistic survival benefit specifically for ER-positive and Stage II patients, whereas the combination of large, poorly differentiated tumors drastically accelerates disease progression. However, overall predictive performance remains modest (test-set R-squared of 0.18). This indicates that while the inclusion of interaction terms successfully captures deeper biological dynamics and improves upon the base model, the available baseline variables still only explain a portion of the total variation in log_PFS.
 
 For the next part, the elastic-net model from Cohort A would be carried forward for external validation on Cohort B.
 
