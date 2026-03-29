@@ -1,5 +1,5 @@
 ---
-title: "P8106 Midterm Project – EDA & Data Cleaning"
+title: "P8106 Midterm Project – EDA, Modeling & Generalization"
 author: ""
 date: "`r Sys.Date()`"
 output:
@@ -292,7 +292,7 @@ gam_result <- postResample(pred = pred_gam, obs = testA$log_PFS)
 ```
 
 
-## 4.4 Model Comparison
+## 4.6 Model Comparison
 ```{r}
 results <- data.frame(lm_result, glmnet_result, glmnet_int_result, gam_result)
 results
@@ -307,14 +307,97 @@ sorted_coefs <- active_coefs[order(-abs(active_coefs[, 1])), , drop = FALSE]
 print(sorted_coefs)
 ```
 
-## 4.5 Result
+## 4.7 Cross-Validation Summary & Tuning Parameters
+
+```{r}
+# *ms* CV performance summary across all models
+cv_summary <- data.frame(
+  Model = c("OLS", "Elastic Net", "Interactive Elastic Net", "GAM (test only)"),
+  CV_RMSE = c(
+    min(fit_lm$results$RMSE),
+    min(fit_glmnet$results$RMSE),
+    min(fit_glmnet_int$results$RMSE),
+    NA
+  ),
+  CV_Rsquared = c(
+    max(fit_lm$results$Rsquared),
+    max(fit_glmnet$results$Rsquared),
+    max(fit_glmnet_int$results$Rsquared),
+    NA
+  ),
+  Test_RMSE = c(lm_result["RMSE"], glmnet_result["RMSE"],
+                glmnet_int_result["RMSE"], gam_result["RMSE"]),
+  Test_Rsquared = c(lm_result["Rsquared"], glmnet_result["Rsquared"],
+                    glmnet_int_result["Rsquared"], gam_result["Rsquared"]),
+  Test_MAE = c(lm_result["MAE"], glmnet_result["MAE"],
+               glmnet_int_result["MAE"], gam_result["MAE"])
+)
+cv_summary[, -1] <- round(cv_summary[, -1], 4)
+cv_summary
+```
+
+```{r}
+# *ms* Best tuning parameters for elastic net models
+best_glmnet <- fit_glmnet$bestTune
+best_glmnet_int <- fit_glmnet_int$bestTune
+
+data.frame(
+  Model = c("Elastic Net", "Interactive Elastic Net"),
+  alpha = c(best_glmnet$alpha, best_glmnet_int$alpha),
+  lambda = round(c(best_glmnet$lambda, best_glmnet_int$lambda), 5)
+)
+```
+
+## 4.8 Model Diagnostics (Interactive Elastic Net)
+
+```{r}
+# *ms* Residual diagnostics for the selected model
+# Since caret's glmnet doesn't store residuals directly,
+# we compute fitted values on training data
+pred_train <- predict(fit_glmnet_int, newdata = trainA)
+resid_train <- trainA$log_PFS - pred_train
+
+par(mfrow = c(1, 3))
+
+# Residuals vs Fitted
+plot(pred_train, resid_train,
+     pch = 16, cex = 0.5, col = rgb(0, 0.3, 0.6, 0.3),
+     xlab = "Fitted Values", ylab = "Residuals",
+     main = "Residuals vs Fitted")
+abline(h = 0, col = "red", lwd = 2, lty = 2)
+lines(lowess(pred_train, resid_train), col = "blue", lwd = 2)
+
+# Q-Q Plot of Residuals
+qqnorm(resid_train, pch = 16, cex = 0.5,
+       col = rgb(0, 0.3, 0.6, 0.5),
+       main = "Normal Q-Q Plot of Residuals")
+qqline(resid_train, col = "red", lwd = 2)
+
+# Histogram of Residuals
+hist(resid_train, breaks = 30,
+     main = "Distribution of Residuals",
+     xlab = "Residuals", col = "steelblue", border = "white")
+abline(v = 0, col = "red", lwd = 2, lty = 2)
+```
+
+```{r}
+# *ms* Shapiro-Wilk normality test on residuals (sample of 5000 if needed)
+if (length(resid_train) > 5000) {
+  set.seed(1)
+  shapiro.test(sample(resid_train, 5000))
+} else {
+  shapiro.test(resid_train)
+}
+```
+
+## 4.9 Result
 
 Fitting model with `glmnet` framework shows a better performance because it has lower RMSE & MAE, and a higher R-squared. We selected the elastic-net model as the final model for Cohort A. t also produced a more parsimonious model by shrinking some coefficients to zero, including BMI, PR, stage II, and chemotherapy. The predictors that remained important in the final model were age, menopausal status, race, tumor size, tumor grade, lymph nodes, ER, HER2, Ki67, surgery type, and hormonal therapy.
 
 
 *yw* Fitting the model with the interactive glmnet demonstrated superior predictive performance because it has the lowest RMSE and MAE among all tested models. We selected the interactive elastic-net as the final prediction model for Cohort A. The regularization penalty effectively managed the high-dimensional feature space, producing a parsimonious model by shrinking the vast majority of the non-informative main effects and potential interactions to exactly zero. The strongest standalone predictors that remained important included ER status, hormonal therapy, lymph node involvement, tumor grade, and Ki-67 index. Crucially, the model successfully isolated highly predictive interaction terms, capturing complex clinical synergies like ERPositive:hormonal_therapyYes and compounding risk factors such as HER2Positive:stageII and tumor_size:tumor_gradePoor.
 
-## 4.6 Interpretation
+## 4.10 Interpretation
 
 Overall, the final model suggests that greater tumor burden and more aggressive tumor biology are associated with shorter progression-free survival, while ER positivity and hormonal therapy are associated with longer progression-free survival. However, predictive performance was only modest (test-set R² about 0.17), which means the available baseline variables explain some, but not all, of the variation in log_PFS.
 
@@ -323,6 +406,57 @@ So for the next part, the elastic-net model from Cohort A should be carried forw
 *yw* Overall, the final model suggests that while aggressive tumor biology is associated with shorter progression-free survival, ER positivity and hormonal therapy act as strong baseline protective factors. Furthermore, the interaction terms reveal critical clinical finding: hormonal therapy provides a compounding, synergistic survival benefit specifically for ER-positive and Stage II patients, whereas the combination of large, poorly differentiated tumors drastically accelerates disease progression. However, overall predictive performance remains modest (test-set R-squared of 0.18). This indicates that while the inclusion of interaction terms successfully captures deeper biological dynamics and improves upon the base model, the available baseline variables still only explain a portion of the total variation in log_PFS.
 
 # 5 Generalization
+
+## 5.0 Cohort Comparison
+
+```{r}
+# *ms* Compare distributions between Cohort A and Cohort B
+cohort_comp <- data.frame(
+  Variable = c("n", "log_PFS mean (SD)", "Age mean (SD)", "BMI mean (SD)",
+               "Tumor size mean (SD)", "Lymph nodes mean (SD)", "Ki67 mean (SD)",
+               "ER positive (%)", "PR positive (%)", "HER2 positive (%)",
+               "Chemo (%)", "Hormonal therapy (%)", "Mastectomy (%)"),
+  Cohort_A = c(
+    nrow(datA),
+    paste0(round(mean(datA$log_PFS), 3), " (", round(sd(datA$log_PFS), 3), ")"),
+    paste0(round(mean(datA$age), 1), " (", round(sd(datA$age), 1), ")"),
+    paste0(round(mean(datA$bmi), 1), " (", round(sd(datA$bmi), 1), ")"),
+    paste0(round(mean(datA$tumor_size), 2), " (", round(sd(datA$tumor_size), 2), ")"),
+    paste0(round(mean(datA$lymph_nodes), 2), " (", round(sd(datA$lymph_nodes), 2), ")"),
+    paste0(round(mean(datA$Ki67), 1), " (", round(sd(datA$Ki67), 1), ")"),
+    round(mean(datA$ER == "Positive") * 100, 1),
+    round(mean(datA$PR == "Positive") * 100, 1),
+    round(mean(datA$HER2 == "Positive") * 100, 1),
+    round(mean(datA$chemo == "Yes") * 100, 1),
+    round(mean(datA$hormonal_therapy == "Yes") * 100, 1),
+    round(mean(datA$surgery == "Mastectomy") * 100, 1)
+  ),
+  Cohort_B = c(
+    nrow(datB),
+    paste0(round(mean(datB$log_PFS), 3), " (", round(sd(datB$log_PFS), 3), ")"),
+    paste0(round(mean(datB$age), 1), " (", round(sd(datB$age), 1), ")"),
+    paste0(round(mean(datB$bmi), 1), " (", round(sd(datB$bmi), 1), ")"),
+    paste0(round(mean(datB$tumor_size), 2), " (", round(sd(datB$tumor_size), 2), ")"),
+    paste0(round(mean(datB$lymph_nodes), 2), " (", round(sd(datB$lymph_nodes), 2), ")"),
+    paste0(round(mean(datB$Ki67), 1), " (", round(sd(datB$Ki67), 1), ")"),
+    round(mean(datB$ER == "Positive") * 100, 1),
+    round(mean(datB$PR == "Positive") * 100, 1),
+    round(mean(datB$HER2 == "Positive") * 100, 1),
+    round(mean(datB$chemo == "Yes") * 100, 1),
+    round(mean(datB$hormonal_therapy == "Yes") * 100, 1),
+    round(mean(datB$surgery == "Mastectomy") * 100, 1)
+  )
+)
+cohort_comp
+```
+
+```{r}
+# *ms* t-tests for continuous variables, chi-sq for categorical
+cont_tests <- sapply(c("age", "bmi", "tumor_size", "lymph_nodes", "Ki67", "log_PFS"), function(v) {
+  round(t.test(datA[[v]], datB[[v]])$p.value, 4)
+})
+data.frame(Variable = names(cont_tests), p_value = cont_tests)
+```
 
 ## 5.1 External Validation with Cohort B
 ```{r}
@@ -346,6 +480,25 @@ external_validation_results <- postResample(pred = pred_b, obs = testB$log_PFS)
 print(external_validation_results)
 ```
 
+```{r}
+# *ms* Predicted vs Actual plot for external validation
+par(mfrow = c(1, 2))
+
+# Model A on Cohort A test set
+plot(testA$log_PFS, pred_glmnet_int,
+     pch = 16, cex = 0.5, col = rgb(0, 0.3, 0.6, 0.4),
+     xlab = "Observed log(PFS)", ylab = "Predicted log(PFS)",
+     main = "Model A on Cohort A (Test)")
+abline(0, 1, col = "red", lwd = 2, lty = 2)
+
+# Model A on Cohort B test set
+plot(testB$log_PFS, pred_b,
+     pch = 16, cex = 0.5, col = rgb(0.6, 0.1, 0.1, 0.4),
+     xlab = "Observed log(PFS)", ylab = "Predicted log(PFS)",
+     main = "Model A on Cohort B (External)")
+abline(0, 1, col = "red", lwd = 2, lty = 2)
+```
+
 The interactive Elastic Net model does not seem to be robust on cohort B as the RMSE increased from 0.74 to 0.87 and the MAE increased from 0.58 to 0.70. Since our is log-transformed PFS, a 0.12 increase in average error on the log scale is significant. The model trained on cohort A are missing the true survival times in cohort B by a wider margin. Considering factors like health care standards between the 1990s and the early 2000s, we should build a model to adapt the potential changes of predictors.
 
 ## 5.2 Fitting a new Interactive Elastic Net
@@ -363,6 +516,56 @@ active_coefs_b <- coef_mat_b[coef_mat_b[, 1] != 0, , drop = FALSE]
 sorted_coefs_b <- active_coefs_b[order(-abs(active_coefs_b[, 1])), , drop = FALSE]
 
 print(sorted_coefs_b)
+```
+
+```{r}
+# *ms* CV summary and tuning for new Cohort B model
+best_b <- fit_glmnet_int_b$bestTune
+data.frame(
+  Metric = c("Best alpha", "Best lambda", "CV RMSE", "CV R-squared",
+             "Test RMSE", "Test R-squared", "Test MAE"),
+  Value = round(c(
+    best_b$alpha, best_b$lambda,
+    min(fit_glmnet_int_b$results$RMSE),
+    max(fit_glmnet_int_b$results$Rsquared),
+    new_model_results["RMSE"], new_model_results["Rsquared"], new_model_results["MAE"]
+  ), 4)
+)
+```
+
+```{r}
+# *ms* Diagnostics for new Cohort B model
+pred_train_b <- predict(fit_glmnet_int_b, newdata = trainB)
+resid_train_b <- trainB$log_PFS - pred_train_b
+
+par(mfrow = c(1, 3))
+
+plot(pred_train_b, resid_train_b,
+     pch = 16, cex = 0.5, col = rgb(0, 0.3, 0.6, 0.3),
+     xlab = "Fitted Values", ylab = "Residuals",
+     main = "Residuals vs Fitted (Cohort B)")
+abline(h = 0, col = "red", lwd = 2, lty = 2)
+lines(lowess(pred_train_b, resid_train_b), col = "blue", lwd = 2)
+
+qqnorm(resid_train_b, pch = 16, cex = 0.5,
+       col = rgb(0, 0.3, 0.6, 0.5),
+       main = "Q-Q Plot (Cohort B)")
+qqline(resid_train_b, col = "red", lwd = 2)
+
+hist(resid_train_b, breaks = 30,
+     main = "Residual Distribution (Cohort B)",
+     xlab = "Residuals", col = "steelblue", border = "white")
+abline(v = 0, col = "red", lwd = 2, lty = 2)
+```
+
+```{r}
+# *ms* Predicted vs Actual for new model
+par(mfrow = c(1, 1))
+plot(testB$log_PFS, pred_b_new,
+     pch = 16, cex = 0.5, col = rgb(0, 0.3, 0.6, 0.4),
+     xlab = "Observed log(PFS)", ylab = "Predicted log(PFS)",
+     main = "New Model on Cohort B (Test)")
+abline(0, 1, col = "red", lwd = 2, lty = 2)
 ```
 
 There are several key changes in predictive terms:
